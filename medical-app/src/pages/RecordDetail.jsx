@@ -1,14 +1,15 @@
 
-
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 
-import { getRecordWithAttachments, db } from '../db';
-import { ArrowLeft, Calendar, MapPin, Activity, Clock, Trash, FileText, Download, Share2, X, User } from 'lucide-react';
+import { getRecordWithAttachments, db, updateRecord } from '../db';
+import { ArrowLeft, Calendar, MapPin, Activity, Trash, FileText, Download, Share2, X, User, Loader } from 'lucide-react';
 import { format } from 'date-fns';
+import Tesseract from 'tesseract.js';
+import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 
 const RecordDetail = () => {
   const { id } = useParams();
@@ -30,6 +31,44 @@ const RecordDetail = () => {
     }
     setRecord(data);
     setLoading(false);
+
+    // Check for pending OCRs and resume them
+    if (data.attachments) {
+        data.attachments.forEach(att => {
+            if (att.ocrStatus === 'scanning' && att.data) {
+                resumeOCR(att);
+            }
+        });
+    }
+  };
+
+  const resumeOCR = async (att) => {
+      console.log("Resuming OCR for", att.id);
+      try {
+        const result = await Tesseract.recognize(att.data, 'chi_sim+eng', {
+            logger: m => console.log(m)
+        });
+        const text = result.data.text;
+        
+        // Update DB directly
+        await db.attachments.update(att.id, {
+            ocrStatus: 'done',
+            ocrText: text
+        });
+
+        // Update local state to show result
+        setRecord(prev => {
+            if(!prev) return prev;
+            return {
+                ...prev,
+                attachments: prev.attachments.map(a => a.id === att.id ? { ...a, ocrStatus: 'done', ocrText: text } : a)
+            };
+        });
+
+      } catch (e) {
+          console.error("Resumed OCR failed", e);
+          await db.attachments.update(att.id, { ocrStatus: 'error' });
+      }
   };
 
   const handleDelete = async () => {
@@ -133,16 +172,6 @@ END:VCALENDAR`;
       a.click();
   };
 
-
-  const [scale, setScale] = useState(1);
-
-  const handleZoom = (e) => {
-      // Very simple click to zoom in/out
-      e.stopPropagation();
-      setScale(prev => prev === 1 ? 2.5 : 1);
-  };
-
-
   const renderModuleThumbnails = (moduleName) => {
       const moduleAttachments = record.attachments?.filter(a => a.module === moduleName) || [];
       if (moduleAttachments.length === 0) return null;
@@ -163,8 +192,8 @@ END:VCALENDAR`;
                           <img 
                               src={att.data} 
                               alt="thumbnail" 
-                              style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }} 
-                              onClick={() => { setScale(1); setPreviewImage(att.data); }}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
+                              onClick={() => { setPreviewImage(att.data); }}
                           />
                            {label && (
                                 <div style={{ 
@@ -191,34 +220,26 @@ END:VCALENDAR`;
       {previewImage && (
           <div 
             style={{ position: 'fixed', inset: 0, background: 'black', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }} 
-            onClick={() => setPreviewImage(null)}
           >
-              <div style={{ width: '100%', height: '100%', overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  <img 
-                    src={previewImage} 
-                    style={{ 
-                        maxWidth: '100vw', 
-                        maxHeight: '100vh', 
-                        objectFit: 'contain',
-                        transform: `scale(${scale})`,
-                        transition: 'transform 0.3s',
-                        cursor: scale === 1 ? 'zoom-in' : 'zoom-out'
-                    }} 
-                    onClick={handleZoom}
-                />
+              <div style={{ width: '100%', height: '100%' }}>
+                   <TransformWrapper>
+                        <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }} contentStyle={{ width: "100%", height: "100%" }}>
+                            <img src={previewImage} style={{ width: '100vw', height: '100vh', objectFit: 'contain' }} />
+                        </TransformComponent>
+                   </TransformWrapper>
               </div>
               
                <a 
                     href={previewImage} 
                     download={`preview_${Date.now()}.png`}
                     onClick={(e) => e.stopPropagation()}
-                    style={{ position: 'absolute', top: 40, right: 80, background: 'rgba(255,255,255,0.2)', borderRadius: '50%', padding: '10px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ position: 'absolute', top: 40, right: 80, background: 'rgba(255,255,255,0.2)', borderRadius: '50%', padding: '10px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2001 }}
                 >
                     <Download size={24}/>
                 </a>
 
               <button 
-                  style={{ position: 'absolute', top: '40px', right: '20px', background: 'rgba(255,255,255,0.3)', borderRadius: '50%', color: 'white', padding: '8px', border: 'none', zIndex: 2001 }}
+                  style={{ position: 'absolute', top: '40px', right: '20px', background: 'rgba(255,255,255,0.2)', borderRadius: '50%', color: 'white', padding: '10px', border: 'none', zIndex: 2001 }}
                   onClick={(e) => { e.stopPropagation(); setPreviewImage(null); }}
               >
                   <X size={24} />
@@ -302,7 +323,7 @@ END:VCALENDAR`;
                   <div className="text-xs text-muted mb-2" style={{ fontWeight: 600, color: '#C2410C' }}>医疗费用</div>
                   
                   {/* Summary */}
-                  <div className="grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginBottom: '8px' }}>
+                  <div className="grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem', marginBottom: '8px' }}>
                         <div><div className="text-xs text-muted">总金额</div><div style={{ fontWeight: 'bold' }}>￥{parseFloat(record.cost_total||0).toFixed(2)}</div></div>
                         <div><div className="text-xs text-muted">自费</div><div>￥{parseFloat(record.cost_self||0).toFixed(2)}</div></div>
                         <div><div className="text-xs text-muted">统筹</div><div>￥{parseFloat(record.cost_pool||0).toFixed(2)}</div></div>
@@ -337,14 +358,14 @@ END:VCALENDAR`;
       {(record.attachments?.some(a => !a.module)) && (
           <div className="card">
             <h3>附件 ({record.attachments?.filter(a => !a.module).length})</h3>
-            <div className="grid" style={{ gap: '1rem' }}>
+            <div className="grid" style={{ gap: '1rem', gridTemplateColumns: '1fr' }}>
                 {record.attachments?.filter(att => !att.module).map(att => (
                 <div key={att.id} style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '10px' }}>
                     {/* Header / Type */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {att.type === 'application/pdf' ? <FileText size={20} /> : <MapPin size={20} />}
-                            <span className="text-sm" style={{ fontWeight: 500 }}>
+                            {att.type === 'application/pdf' ? <FileText size={20} style={{flexShrink:0}} /> : <MapPin size={20} style={{flexShrink:0}} />}
+                            <span className="text-sm" style={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '150px' }}>
                                 {att.name || (att.type === 'application/pdf' ? 'PDF文件' : '图片')}
                             </span>
                         </div>
@@ -369,7 +390,7 @@ END:VCALENDAR`;
                                 src={att.data} 
                                 style={{ width: '100%', borderRadius: '8px', border: '1px solid var(--border)' }} 
                                 loading="lazy" 
-                                onClick={() => { setScale(1); setPreviewImage(att.data); }}
+                                onClick={() => { setPreviewImage(att.data); }}
                             />
                     )}
                 </div>
@@ -378,15 +399,6 @@ END:VCALENDAR`;
           </div>
       )}
 
-
-      <div className="card">
-         <h3>后续提醒</h3>
-         <p className="text-muted text-sm">将此记录添加到日历提醒。</p>
-         <button className="btn btn-primary" onClick={generateICS}>
-            <Clock size={18} style={{ marginRight: '8px' }} />
-            设置日历提醒
-         </button>
-      </div>
 
     </div>
   );

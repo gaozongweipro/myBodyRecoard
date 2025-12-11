@@ -8,6 +8,13 @@ db.version(1).stores({
   attachments: '++id, recordId, type' // content stored but not indexed
 });
 
+// Version 2: Add medications table
+db.version(2).stores({
+  records: '++id, date, hospital, department, type, title, timestamp',
+  attachments: '++id, recordId, type',
+  medications: '++id, name, startDate, endDate, status, linkedRecordId, createdAt'
+});
+
 export const addRecord = async (record, attachments = []) => {
   return db.transaction('rw', db.records, db.attachments, async () => {
     const recordId = await db.records.add({
@@ -73,12 +80,16 @@ export const searchRecords = async (query) => {
     return results.sort((a,b) => new Date(b.date) - new Date(a.date));
 };
 
-export const updateRecord = async (id, updates, newAttachments = []) => {
+export const updateRecord = async (id, updates, newAttachments = [], deletedAttachmentIds = []) => {
   return db.transaction('rw', db.records, db.attachments, async () => {
     await db.records.update(id, {
         ...updates,
         timestamp: new Date().toISOString()
     });
+
+    if (deletedAttachmentIds && deletedAttachmentIds.length > 0) {
+        await db.attachments.bulkDelete(deletedAttachmentIds);
+    }
 
     if (newAttachments.length > 0) {
        await db.attachments.bulkAdd(newAttachments.map(att => ({
@@ -94,5 +105,49 @@ export const deleteRecord = async (id) => {
     return db.transaction('rw', db.records, db.attachments, async () => {
         await db.records.delete(id);
         await db.attachments.where('recordId').equals(id).delete();
+    });
+};
+
+// ========== Medication Management ==========
+
+export const addMedication = async (medication) => {
+    return await db.medications.add({
+        ...medication,
+        createdAt: new Date().toISOString(),
+        status: medication.status || 'active'
+    });
+};
+
+export const getAllMedications = async () => {
+    return await db.medications.orderBy('createdAt').reverse().toArray();
+};
+
+export const getActiveMedications = async () => {
+    return await db.medications.where('status').equals('active').toArray();
+};
+
+export const getMedicationById = async (id) => {
+    return await db.medications.get(id);
+};
+
+export const updateMedication = async (id, updates) => {
+    return await db.medications.update(id, updates);
+};
+
+export const deleteMedication = async (id) => {
+    return await db.medications.delete(id);
+};
+
+export const stopMedication = async (id) => {
+    return await db.medications.update(id, { 
+        status: 'stopped',
+        stoppedAt: new Date().toISOString()
+    });
+};
+
+export const completeMedication = async (id) => {
+    return await db.medications.update(id, { 
+        status: 'completed',
+        completedAt: new Date().toISOString()
     });
 };

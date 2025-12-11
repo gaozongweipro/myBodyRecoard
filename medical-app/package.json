@@ -11,9 +11,12 @@
   },
   "dependencies": {
     "@capacitor/android": "^8.0.0",
+    "@capacitor/camera": "^8.0.0",
     "@capacitor/cli": "^8.0.0",
     "@capacitor/core": "^8.0.0",
     "@capacitor/filesystem": "^8.0.0",
+    "@capacitor/haptics": "^8.0.0",
+    "@capacitor/local-notifications": "^8.0.0",
     "@capacitor/share": "^8.0.0",
     "@mlc-ai/web-llm": "^0.2.80",
     "crypto-js": "^4.2.0",
@@ -23,7 +26,9 @@
     "lucide-react": "^0.556.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-image-crop": "^11.0.10",
     "react-router-dom": "^7.10.1",
+    "react-zoom-pan-pinch": "^3.7.0",
     "recharts": "^3.5.1",
     "tesseract.js": "^6.0.1"
   },

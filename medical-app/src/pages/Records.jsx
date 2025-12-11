@@ -1,14 +1,18 @@
-
 import React, { useEffect, useState } from 'react';
 import { searchRecords } from '../db';
 import { Search, Filter } from 'lucide-react';
 import { format } from 'date-fns';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 const Records = () => {
-  const [query, setQuery] = useState('');
+  const [searchParams] = useSearchParams();
+  const [query, setQuery] = useState(searchParams.get('q') || '');
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setQuery(searchParams.get('q') || '');
+  }, [searchParams]);
 
   useEffect(() => {
     handleSearch();

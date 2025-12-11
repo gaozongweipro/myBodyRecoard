@@ -1,8 +1,9 @@
 
+
 import React from 'react';
 
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Home, FileText, PlusCircle, User, BarChart2 } from 'lucide-react';
+import { Home, FileText, PlusCircle, User, BarChart2, Pill } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 const BottomNav = () => {
@@ -22,9 +23,9 @@ const BottomNav = () => {
         <PlusCircle size={24} />
         <span>录入</span>
       </NavLink>
-      <NavLink to="/stats" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-        <BarChart2 size={24} />
-        <span>统计</span>
+      <NavLink to="/medications" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+        <Pill size={24} />
+        <span>用药</span>
       </NavLink>
       <NavLink to="/profile" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
         <User size={24} />

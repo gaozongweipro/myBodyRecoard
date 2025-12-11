@@ -1,4 +1,5 @@
 
+
 import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
@@ -8,6 +9,8 @@ import AddRecord from './pages/AddRecord';
 import Profile from './pages/Profile';
 import RecordDetail from './pages/RecordDetail';
 import Stats from './pages/Stats';
+import Medications from './pages/Medications';
+import AddEditMedication from './pages/AddEditMedication';
 import { AIProvider } from './context/AIContext';
 import { db } from './db';
 import { createBackup } from './utils/backupManager';
@@ -56,6 +59,9 @@ function App() {
             <Route path="add" element={<AddRecord />} />
             <Route path="edit/:id" element={<AddRecord />} />
             <Route path="stats" element={<Stats />} />
+            <Route path="medications" element={<Medications />} />
+            <Route path="medications/add" element={<AddEditMedication />} />
+            <Route path="medications/edit/:id" element={<AddEditMedication />} />
             <Route path="profile" element={<Profile />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
