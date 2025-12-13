@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { getAllRecords } from '../db';
+import { getAllRecords, getActiveMedications, getRecentLogs } from '../db';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
-import { TrendingUp, Building2, Stethoscope, CreditCard, ChevronDown, ChevronUp } from 'lucide-react';
+import { TrendingUp, Building2, Stethoscope, CreditCard, ChevronDown, ChevronUp, Pill } from 'lucide-react';
 import { format, subMonths } from 'date-fns';
 
 import { useNavigate } from 'react-router-dom';
@@ -17,6 +17,12 @@ const Stats = () => {
     // Modals
     const [showAllHospitals, setShowAllHospitals] = useState(false);
     const [showAllDepartments, setShowAllDepartments] = useState(false);
+
+    const [medStats, setMedStats] = useState({
+        activeCount: 0,
+        adherenceRate: 0,
+        logsCount: 0
+    });
 
     const [summary, setSummary] = useState({
         totalRecords: 0,
@@ -97,6 +103,31 @@ const Stats = () => {
             });
         }
 
+        // Medication Stats Calculation
+        try {
+            const activeMeds = await getActiveMedications();
+            const recentLogs = await getRecentLogs(7);
+            
+            let expectedDosesPerDay = 0;
+            activeMeds.forEach(m => {
+                 if (m.times) expectedDosesPerDay += m.times.length;
+            });
+            
+            // Simplified expected calculation: assuming all current meds were active for last 7 days
+            const expectedTotal = expectedDosesPerDay * 7;
+            const actualTotal = recentLogs.filter(l => l.status === 'taken').length;
+            
+            const adherenceRate = expectedTotal > 0 ? Math.min((actualTotal / expectedTotal) * 100, 100) : 0;
+            
+            setMedStats({
+                activeCount: activeMeds.length,
+                adherenceRate,
+                logsCount: actualTotal
+            });
+        } catch (e) {
+            console.error('Calculated med stats error', e);
+        }
+
         setSummary({
             totalRecords,
             totalCost,
@@ -120,6 +151,49 @@ const Stats = () => {
     return (
         <div className="container" style={{ paddingBottom: '100px' }}>
             <h2 className="mb-4">数据统计</h2>
+
+            {/* Medication Stats Card */}
+            <div className="card mb-4" style={{ 
+                background: 'linear-gradient(135deg, #10B981, #059669)', 
+                color: 'white',
+                border: 'none',
+                boxShadow: '0 8px 16px rgba(16, 185, 129, 0.25)'
+            }}>
+                <div className="flex-between">
+                    <div>
+                        <h3 style={{ fontSize: '0.95rem', opacity: 0.95, marginBottom: '6px', fontWeight: 600 }}>本周服药依从性</h3>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                            <div style={{ fontSize: '2.5rem', fontWeight: 800, lineHeight: 1 }}>
+                                {medStats.adherenceRate.toFixed(0)}
+                            </div>
+                            <span style={{ fontSize: '1.1rem', fontWeight: 600, opacity: 0.9 }}>%</span>
+                        </div>
+                        <div style={{ fontSize: '0.85rem', opacity: 0.9, marginTop: '6px', fontWeight: 500 }}>
+                            {medStats.activeCount > 0 ? `正在服用 ${medStats.activeCount} 种药物` : '当前暂无服药计划'}
+                        </div>
+                    </div>
+                    
+                    <div style={{
+                        width: '80px', height: '80px', borderRadius: '50%',
+                        background: `conic-gradient(white ${medStats.adherenceRate}%, rgba(255,255,255,0.2) ${medStats.adherenceRate}%)`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                    }}>
+                        <div style={{ 
+                            width: '68px', 
+                            height: '68px', 
+                            background: '#059669', 
+                            borderRadius: '50%', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)'
+                        }}>
+                             <Pill size={32} color="white" />
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             {/* Key Metrics Grid - Modified to include Expandable Cost Card */}
             <div className="grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.8rem', marginBottom: '1.5rem' }}>

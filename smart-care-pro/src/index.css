@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: #F8FAFC;
+  color: #0F172A;
+}
+
+/* Hide Scrollbar but keep functionality */
+/* For Webkit */
+::-webkit-scrollbar {
+    width: 0px;
+    background: transparent;
+}
+
+/* Custom Animations to mimic tailwindcss-animate and provide elegant feeling */
+@layer utilities {
+  .animate-in {
+    animation-duration: var(--tw-animate-duration, 300ms);
+    animation-fill-mode: both;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); /* Elegant Ease */
+  }
+  
+  .fade-in {
+    animation-name: fadeIn;
+  }
+  
+  .slide-in-from-bottom { /* Full sheet slide */
+    animation-name: slideInFromBottomFull;
+  }
+  
+  .slide-in-from-bottom-4 {
+    animation-name: slideInFromBottom4;
+  }
+  .slide-in-from-bottom-8 {
+    animation-name: slideInFromBottom8;
+  }
+  .slide-in-from-bottom-10 {
+     animation-name: slideInFromBottom10;
+  }
+  
+  .slide-in-from-right-12 {
+    animation-name: slideInFromRight12; 
+  }
+  .slide-in-from-left-12 {
+    animation-name: slideInFromLeft12;
+  }
+  
+  .zoom-in-95 {
+    animation-name: zoomIn95;
+  }
+
+  .duration-200 { --tw-animate-duration: 200ms; animation-duration: 200ms; }
+  .duration-300 { --tw-animate-duration: 300ms; animation-duration: 300ms; }
+  .duration-500 { --tw-animate-duration: 500ms; animation-duration: 500ms; }
+  .duration-700 { --tw-animate-duration: 700ms; animation-duration: 700ms; }
+  
+  /* Stagger delays */
+  .delay-100 { animation-delay: 100ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-300 { animation-delay: 300ms; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInFromBottomFull {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes slideInFromBottom4 {
+  from { transform: translateY(1rem); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes slideInFromBottom8 {
+    from { transform: translateY(2rem); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+@keyframes slideInFromBottom10 {
+    from { transform: translateY(2.5rem); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideInFromRight12 {
+    from { transform: translateX(3rem); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInFromLeft12 {
+    from { transform: translateX(-3rem); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes zoomIn95 {
+    from { transform: scale(0.95); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}

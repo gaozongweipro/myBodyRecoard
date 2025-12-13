@@ -5,6 +5,7 @@ import React from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Home, FileText, PlusCircle, User, BarChart2, Pill } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
+import AIChat from './AIChat';
 
 const BottomNav = () => {
   return (
@@ -78,6 +79,7 @@ const Layout = () => {
         </AnimatePresence>
       </div>
       
+      <AIChat />
       <BottomNav />
     </div>
   );

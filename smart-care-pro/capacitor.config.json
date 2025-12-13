@@ -1,0 +1,10 @@
+{
+  "appId": "io.smartcare.pro",
+  "appName": "SmartCarePro",
+  "webDir": "dist",
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

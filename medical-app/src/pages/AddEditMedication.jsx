@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { addMedication, updateMedication, getMedicationById } from '../db';
-import { ArrowLeft, Plus, X, Save, Camera, Loader } from 'lucide-react';
+import { addMedication, updateMedication, getMedicationById, getAllRecords } from '../db';
+import { ArrowLeft, Plus, X, Save, Camera, Loader, Link as LinkIcon } from 'lucide-react';
 import { Camera as CapacitorCamera, CameraResultType } from '@capacitor/camera';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import Tesseract from 'tesseract.js';
+import { scheduleMedicationReminders, cancelMedicationReminders } from '../utils/notifications';
 
 const AddEditMedication = () => {
     const navigate = useNavigate();
@@ -28,12 +30,25 @@ const AddEditMedication = () => {
     const [ocrProcessing, setOcrProcessing] = useState(false);
     const [prescriptionImage, setPrescriptionImage] = useState(null); // Store prescription photo
     const [previewImage, setPreviewImage] = useState(null); // For fullscreen preview
+    const [records, setRecords] = useState([]); // Available records for linking
 
     useEffect(() => {
+        loadRecords();
         if (isEditMode) {
             loadMedication();
         }
     }, [id]);
+
+    const loadRecords = async () => {
+        try {
+            const all = await getAllRecords();
+            // Sort by date desc
+            all.sort((a, b) => new Date(b.date) - new Date(a.date));
+            setRecords(all);
+        } catch (e) {
+            console.error('Load records failed', e);
+        }
+    };
 
     const loadMedication = async () => {
         try {
@@ -74,13 +89,23 @@ const AddEditMedication = () => {
                 prescriptionImage: prescriptionImage // Save prescription image
             };
 
+            let savedId = isEditMode ? parseInt(id) : null;
+
             if (isEditMode) {
                 await updateMedication(parseInt(id), medicationData);
             } else {
-                await addMedication(medicationData);
+                savedId = await addMedication(medicationData);
             }
 
-            // TODO: Schedule notifications here
+            // Schedule Notifications logic
+            if (medicationData.reminderEnabled) {
+                await scheduleMedicationReminders({ ...medicationData, id: savedId });
+            } else {
+                await cancelMedicationReminders(savedId);
+            }
+
+            // Success feedback
+            await Haptics.impact({ style: ImpactStyle.Medium });
 
             navigate('/medications');
         } catch (err) {
@@ -357,13 +382,44 @@ const AddEditMedication = () => {
                         value={formData.frequency}
                         onChange={e => setFormData({ ...formData, frequency: e.target.value })}
                         className="mb-4"
+                        style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #E2E8F0', background: 'white' }}
                     >
-                        <option>每日1次</option>
-                        <option>每日2次</option>
-                        <option>每日3次</option>
-                        <option>每日4次</option>
-                        <option>需要时服用</option>
+                        <option value="每日1次">每日1次</option>
+                        <option value="每日2次">每日2次</option>
+                        <option value="每日3次">每日3次</option>
+                        <option value="每日4次">每日4次</option>
                     </select>
+
+                    {/* Linked Record Selection */}
+                    <div style={{ marginTop: '4px', paddingTop: '16px', borderTop: '1px solid #F1F5F9' }}>
+                        <label className="text-sm text-muted mb-2 block">关联就诊记录</label>
+                        <div style={{ position: 'relative' }}>
+                            <select 
+                                value={formData.linkedRecordId || ''}
+                                onChange={e => setFormData({...formData, linkedRecordId: e.target.value ? parseInt(e.target.value) : null})}
+                                style={{
+                                    width: '100%',
+                                    padding: '12px',
+                                    paddingRight: '32px',
+                                    borderRadius: '12px',
+                                    border: '1px solid #E2E8F0',
+                                    background: 'white',
+                                    fontSize: '0.9rem',
+                                    appearance: 'none',
+                                    color: formData.linkedRecordId ? '#0F172A' : '#94A3B8'
+                                }}
+                            >
+                                <option value="">不关联</option>
+                                {records.map(rec => (
+                                    <option key={rec.id} value={rec.id}>
+                                        {rec.date.slice(0, 10)} - {rec.hospital} ({rec.department})
+                                    </option>
+                                ))}
+                            </select>
+                            <LinkIcon size={16} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748B', pointerEvents: 'none' }} />
+                        </div>
+                    </div>
+
 
                     <label className="text-sm text-muted mb-1 block">用法</label>
                     <input

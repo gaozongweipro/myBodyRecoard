@@ -1,27 +1,226 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getActiveMedications, getAllMedications, stopMedication, deleteMedication } from '../db';
+import { getActiveMedications, getAllMedications, stopMedication, deleteMedication, getTodayLogs, addMedicationLog, deleteMedicationLog } from '../db';
 import { Plus, Pill, Clock, Calendar, AlertCircle, Check, X, Edit, Trash2, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
+import { cancelMedicationReminders } from '../utils/notifications';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
+
+// Long Press Button Component
+const DoseItem = ({ dose, medId, onToggle }) => {
+    const [progress, setProgress] = useState(0);
+    const [isPressing, setIsPressing] = useState(false);
+    const [dimensions, setDimensions] = useState({ width: 0, height: 46 });
+    
+    const requestRef = React.useRef();
+    const startTimeRef = React.useRef();
+    const hapticIntervalRef = React.useRef();
+    const wrapperRef = React.useRef(null);
+    
+    // Config
+    const PRESS_DURATION = 800; // ms
+    
+    const startPress = () => {
+        if (dose.isTaken) {
+            // If already taken, just simple click/confirm to undo
+            if(confirm('撤销此打卡记录？')) {
+                onToggle(medId, dose.time);
+            }
+            return;
+        }
+
+        // Measure current size for SVG path
+        if (wrapperRef.current) {
+            setDimensions({
+                width: wrapperRef.current.offsetWidth,
+                height: wrapperRef.current.offsetHeight
+            });
+        }
+
+        // Clear any previous interval to be safe
+        if (hapticIntervalRef.current) clearInterval(hapticIntervalRef.current);
+
+        setIsPressing(true);
+        startTimeRef.current = Date.now();
+        setProgress(0);
+        
+        // Haptic feedback loop during press
+        hapticIntervalRef.current = setInterval(() => {
+            Haptics.impact({ style: ImpactStyle.Light });
+        }, 150);
+
+        const animate = () => {
+            const elapsed = Date.now() - startTimeRef.current;
+            const newProgress = Math.min((elapsed / PRESS_DURATION) * 100, 100);
+            
+            setProgress(newProgress);
+            
+            if (newProgress < 100) {
+                requestRef.current = requestAnimationFrame(animate);
+            } else {
+                // Completed!
+                triggerComplete();
+            }
+        };
+        
+        requestRef.current = requestAnimationFrame(animate);
+    };
+
+    const cancelPress = () => {
+        setIsPressing(false);
+        setProgress(0);
+        if (requestRef.current) cancelAnimationFrame(requestRef.current);
+        if (hapticIntervalRef.current) clearInterval(hapticIntervalRef.current);
+        hapticIntervalRef.current = null;
+    };
+
+    const triggerComplete = async () => {
+        // Stop Loop Haptics FIRST
+        if (hapticIntervalRef.current) clearInterval(hapticIntervalRef.current);
+        hapticIntervalRef.current = null;
+        if (requestRef.current) cancelAnimationFrame(requestRef.current);
+
+        setIsPressing(false);
+        
+        // Success Haptic
+        await Haptics.notification({ type: 'SUCCESS' }); 
+        
+        onToggle(medId, dose.time);
+    };
+
+    // Calculate SVG Path for Capsule (Rect with fully rounded corners)
+    const strokeWidth = 4;
+    // We draw inside the box, so reduce dimensions by strokeWidth
+    const w = dimensions.width - strokeWidth;
+    const h = dimensions.height - strokeWidth;
+    const r = h / 2; // Radius is half height
+    
+    // Perimeter of a capsule: 2 * (length of straight part) + circumference of full circle parts
+    // Straight part length = w - 2*r
+    // Circle parts combined = 2 * PI * r
+    const perimeter = 2 * (w - 2 * r) + 2 * Math.PI * r;
+    
+    const strokeDashoffset = perimeter - (progress / 100) * perimeter;
+
+    return (
+        <div 
+            ref={wrapperRef}
+            className="dose-item-wrapper"
+            style={{ position: 'relative', userSelect: 'none', WebkitUserSelect: 'none' }}
+            onMouseDown={startPress}
+            onMouseUp={cancelPress}
+            onMouseLeave={cancelPress}
+            onTouchStart={startPress}
+            onTouchEnd={cancelPress}
+            onContextMenu={e => e.preventDefault()}
+        >
+            {/* Background & Border */}
+            <div style={{
+                height: '46px',
+                padding: '0 16px 0 12px',
+                borderRadius: '23px',
+                background: dose.isTaken ? '#ECFDF5' : (dose.isPast ? '#FFFBEB' : 'white'),
+                border: dose.isTaken ? '1px solid #10B981' : (dose.isPast ? '1px solid #F59E0B' : '1px solid #E2E8F0'),
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.2s',
+                transform: isPressing ? 'scale(0.98)' : 'scale(1)',
+                position: 'relative',
+                overflow: 'hidden',
+                zIndex: 2
+            }}>
+                {/* Status Icon */}
+                <div style={{
+                    width: '24px', height: '24px',
+                    borderRadius: '50%',
+                    background: dose.isTaken ? '#10B981' : (dose.isPast ? '#F59E0B' : '#F1F5F9'),
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'white',
+                    transition: 'all 0.3s'
+                }}>
+                    {dose.isTaken ? <Check size={14} strokeWidth={3} /> : <Clock size={14} />}
+                </div>
+
+                {/* Text Info */}
+                <div className="flex flex-col">
+                    <span style={{ 
+                        fontSize: '0.9rem', 
+                        fontWeight: 700,
+                        color: dose.isTaken ? '#065F46' : '#1E293B',
+                        textDecoration: dose.isTaken ? 'line-through' : 'none'
+                    }}>
+                        {dose.time}
+                    </span>
+                    <span style={{
+                        fontSize: '0.65rem',
+                        fontWeight: 600,
+                        color: dose.isTaken ? '#059669' : (isPressing ? '#3B82F6' : '#94A3B8'),
+                        transition: 'color 0.2s'
+                    }}>
+                        {dose.isTaken ? '已服药' : (isPressing ? '保持按住...' : (dose.isPast ? '未打卡' : '长按打卡'))}
+                    </span>
+                </div>
+            </div>
+
+            {/* Progress Ring (Absolute Overlay) */}
+            {!dose.isTaken && isPressing && dimensions.width > 0 && (
+                <svg
+                    width={dimensions.width} 
+                    height={dimensions.height}
+                    style={{
+                        position: 'absolute',
+                        top: 0, left: 0,
+                        zIndex: 1, // Under the content div? No, wrapper zIndex needs handling.
+                        // Actually, content div is zIndex 2 (opaque bg). 
+                        // To show progress BORDER, we need this SVG to be ON TOP of content div
+                        // BUT content div has background color...
+                        // So SVG must be zIndex 3, and content div background transparent? No.
+                        // Let's make SVG zIndex 3, fill transparent, stroke visible.
+                        pointerEvents: 'none',
+                        overflow: 'visible'
+                    }}
+                >
+                    <rect
+                        x={strokeWidth / 2}
+                        y={strokeWidth / 2}
+                        width={dimensions.width - strokeWidth}
+                        height={dimensions.height - strokeWidth}
+                        rx={(dimensions.height - strokeWidth) / 2}
+                        fill="none"
+                        stroke="#3B82F6" // Progress Color
+                        strokeWidth={strokeWidth}
+                        strokeDasharray={perimeter}
+                        strokeDashoffset={strokeDashoffset}
+                        strokeLinecap="round"
+                    />
+                </svg>
+            )}
+        </div>
+    );
+};
 
 const Medications = () => {
     const navigate = useNavigate();
     const [medications, setMedications] = useState([]);
+    const [logs, setLogs] = useState([]);
     const [filter, setFilter] = useState('active'); // 'active' | 'all'
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        loadMedications();
+        loadData();
     }, [filter]);
 
-    const loadMedications = async () => {
+    const loadData = async () => {
         setLoading(true);
         try {
-            const data = filter === 'active' 
-                ? await getActiveMedications()
-                : await getAllMedications();
-            setMedications(data);
+            const [meds, todayLogs] = await Promise.all([
+                filter === 'active' ? getActiveMedications() : getAllMedications(),
+                getTodayLogs()
+            ]);
+            setMedications(meds);
+            setLogs(todayLogs);
         } catch (e) {
             console.error('Load medications failed', e);
         } finally {
@@ -32,14 +231,39 @@ const Medications = () => {
     const handleStop = async (id) => {
         if (confirm('确定要停止此用药提醒吗？')) {
             await stopMedication(id);
-            loadMedications();
+            await cancelMedicationReminders(id);
+            await Haptics.impact({ style: ImpactStyle.Light });
+            loadData();
         }
     };
 
     const handleDelete = async (id) => {
         if (confirm('确定要删除此用药记录吗？此操作不可恢复！')) {
             await deleteMedication(id);
-            loadMedications();
+            await cancelMedicationReminders(id);
+            await Haptics.impact({ style: ImpactStyle.Light });
+            loadData();
+        }
+    };
+
+    const handleToggleLog = async (medId, time) => {
+        const today = format(new Date(), 'yyyy-MM-dd');
+        const taken = logs.find(l => l.medicationId === medId && l.time === time);
+        
+        try {
+            if (taken) {
+                 if(confirm('撤销此打卡记录？')) {
+                     await deleteMedicationLog({ medicationId: medId, date: today, time });
+                     await Haptics.impact({ style: ImpactStyle.Light });
+                 }
+            } else {
+                 await addMedicationLog({ medicationId: medId, date: today, time, status: 'taken' });
+                 await Haptics.impact({ style: ImpactStyle.Heavy });
+            }
+            const newLogs = await getTodayLogs();
+            setLogs(newLogs);
+        } catch (e) {
+            console.error(e);
         }
     };
 
@@ -52,11 +276,13 @@ const Medications = () => {
             const [hour, minute] = time.split(':');
             const doseTime = new Date();
             doseTime.setHours(hour, minute, 0);
+            const isTaken = logs.some(l => l.medicationId === med.id && l.time === time);
             
             return {
                 time,
                 isPast: doseTime < now,
-                isComing: doseTime > now && (doseTime - now) < 3600000 // Within 1 hour
+                isComing: doseTime > now && (doseTime - now) < 3600000, // Within 1 hour
+                isTaken
             };
         });
     };
@@ -164,28 +390,16 @@ const Medications = () => {
                         </div>
                         <div className="flex" style={{ gap: '12px', flexWrap: 'wrap' }}>
                             {todayDoses.map((dose, idx) => (
-                                <div 
-                                    key={idx}
-                                    style={{
-                                        padding: '8px 16px',
-                                        borderRadius: '10px',
-                                        border: dose.isPast ? '2px solid #10B981' : '2px solid #E2E8F0',
-                                        background: dose.isPast ? '#ECFDF5' : dose.isComing ? '#FEF3C7' : 'white',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '6px',
-                                        fontSize: '0.9rem',
-                                        fontWeight: 600,
-                                        color: dose.isPast ? '#059669' : dose.isComing ? '#D97706' : '#64748B'
-                                    }}
-                                >
-                                    {dose.isPast && <Check size={16} />}
-                                    {dose.isComing && <AlertCircle size={16} />}
-                                    {!dose.isPast && !dose.isComing && <Clock size={16} />}
-                                    {dose.time}
-                                </div>
+                                <DoseItem 
+                                    key={idx} 
+                                    dose={dose} 
+                                    medId={med.id} 
+                                    onToggle={handleToggleLog} 
+                                />
                             ))}
                         </div>
+
+
                     </div>
                 )}
 

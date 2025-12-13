@@ -9,10 +9,19 @@ db.version(1).stores({
 });
 
 // Version 2: Add medications table
+// Version 2: Add medications table
 db.version(2).stores({
   records: '++id, date, hospital, department, type, title, timestamp',
   attachments: '++id, recordId, type',
   medications: '++id, name, startDate, endDate, status, linkedRecordId, createdAt'
+});
+
+// Version 3: Add medication_logs table
+db.version(3).stores({
+  records: '++id, date, hospital, department, type, title, timestamp',
+  attachments: '++id, recordId, type',
+  medications: '++id, name, startDate, endDate, status, linkedRecordId, createdAt',
+  medication_logs: '++id, medicationId, date, time, status'
 });
 
 export const addRecord = async (record, attachments = []) => {
@@ -150,4 +159,54 @@ export const completeMedication = async (id) => {
         status: 'completed',
         completedAt: new Date().toISOString()
     });
+};
+
+// ========== Medication Logs ==========
+
+export const addMedicationLog = async ({ medicationId, date, time, status }) => {
+    // Check if duplicate log exists
+    const existing = await db.medication_logs
+        .where({ medicationId, date, time })
+        .first();
+        
+    if (existing) {
+        return await db.medication_logs.update(existing.id, { status, timestamp: new Date().toISOString() });
+    }
+
+    return await db.medication_logs.add({
+        medicationId,
+        date,
+        time,
+        status,
+        timestamp: new Date().toISOString()
+    });
+};
+
+export const deleteMedicationLog = async ({ medicationId, date, time }) => {
+    const existing = await db.medication_logs
+        .where({ medicationId, date, time })
+        .first();
+    
+    if (existing) {
+        return await db.medication_logs.delete(existing.id);
+    }
+}
+
+export const getMedicationLogs = async (medicationId) => {
+    return await db.medication_logs.where('medicationId').equals(medicationId).toArray();
+};
+
+export const getTodayLogs = async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    return await db.medication_logs.where('date').equals(today).toArray();
+};
+
+export const getRecentLogs = async (days = 7) => {
+    const today = new Date();
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() - days);
+    
+    const startStr = startDate.toISOString().slice(0, 10);
+    
+    return await db.medication_logs.where('date').aboveOrEqual(startStr).toArray();
 };
